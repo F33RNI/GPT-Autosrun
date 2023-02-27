@@ -31,16 +31,19 @@ NAME_REPLACE_WITH = 'Фамилия И.О.'
 OUTPUT_FILE_FORMAT = '123-456_Name_Surname_Osnovy_naukovedeniya_Pr{0}.docx'
 
 # API type 0 - official, 1 - hacked (better but not stable)
-CHATGPT_API_TYPE = 0
+CHATGPT_API_TYPE = 1
 # FOR TYPE 0 ONLY
 # Go to https://platform.openai.com/account/api-keys and generate new API key and paste it below
 OPENAI_API_KEY = ''
-# FOR TYPE 1 ONLY
-# Go to https://chat.openai.com/api/auth/session and paste accessToken value below
-CHATGPT_ACCESS_TOKEN = ''
 # FOR TYPE 0 ONLY
 # ChatGPT model
 OPENAI_GPT_ENGINE = 'text-davinci-003'
+# FOR TYPE 1 ONLY
+# Go to https://chat.openai.com/api/auth/session and paste accessToken value below
+CHATGPT_ACCESS_TOKEN = ''
+# FOR TYPE 1 ONLY
+# proxy base URL (leave empty for default value)
+CHATGPT_BASE_URL = 'https://apps.openai.com/'
 
 # Formatting settings
 PARAGRAPH_TASK = 'Задание на практическую работу'
@@ -51,8 +54,8 @@ PARAGRAPH_FONT_NAME = 'Times New Roman'
 PARAGRAPH_LEFT_INDENT_MM = 12.5
 PARAGRAPH_LINE_SPACING = WD_LINE_SPACING.ONE_POINT_FIVE
 
-# Skip files with this numbers
-SKIP_TASKS = [1, 2]
+# Skip files with this name
+SKIP_TASKS = [1, 2, 3, 4]
 
 # Replaces parts of the text in request to chatGPT
 GPT_REQUEST_REPLACE_FROM = ['Вашей специальностью']
@@ -241,6 +244,8 @@ if __name__ == '__main__':
         from revChatGPT.V0 import Chatbot
         chatbot = Chatbot(api_key=OPENAI_API_KEY, engine=OPENAI_GPT_ENGINE)
     elif CHATGPT_API_TYPE == 1:
+        if CHATGPT_BASE_URL is not None and len(str(CHATGPT_BASE_URL)) > 0:
+            os.environ['CHATGPT_BASE_URL'] = str(CHATGPT_BASE_URL)
         from revChatGPT.V1 import Chatbot
         chatbot = Chatbot(config={
             'access_token': CHATGPT_ACCESS_TOKEN
