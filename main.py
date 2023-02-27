@@ -71,7 +71,7 @@ REQUEST_SOURCES = 'Напиши по-русски и оформи список �
 REQUEST_CONTINUE = 'Продолжай'
 
 # How many 'continue' requests can be used for each question
-REQUEST_CONTINUE_MAX_TIMES = 1
+REQUEST_CONTINUE_MAX_TIMES = 2
 
 # What to replace in title page
 TASK_N = 'TASKN'
