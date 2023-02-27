@@ -55,7 +55,7 @@ PARAGRAPH_LEFT_INDENT_MM = 12.5
 PARAGRAPH_LINE_SPACING = WD_LINE_SPACING.ONE_POINT_FIVE
 
 # Skip files with this name
-SKIP_TASKS = [1, 2, 3, 4]
+SKIP_TASKS = [1, 2]
 
 # Replaces parts of the text in request to chatGPT
 GPT_REQUEST_REPLACE_FROM = ['Вашей специальностью']
@@ -66,7 +66,8 @@ GPT_REQUEST_REPLACE_TO = ['разработкой мобильных прило�
 REQUEST_QUESTION_API_TYPE_0 = 'Напиши по-русски 500 слов на тему "{0}"'
 REQUEST_QUESTION_API_TYPE_1 = '{0}'
 # {0} - topic name
-REQUEST_SOURCES = 'Напиши по-русски список литературы из книг с номерами страниц или интернет источников по теме "{0}"'
+REQUEST_SOURCES = 'Напиши по-русски и оформи список литературы из книг с номерами ' \
+                  'страниц или интернет источников по теме "{0}"'
 REQUEST_CONTINUE = 'Продолжай'
 
 # How many 'continue' requests can be used for each question
