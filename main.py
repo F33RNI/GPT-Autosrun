@@ -214,7 +214,7 @@ def ask_chatbot(chatbot_, request_, conversation_id_=None):
                 # Print one dot per second
                 if time.time() - dot_printed_last_time >= 1.:
                     dot_printed_last_time = time.time()
-                    print('.', end='')
+                    print('.', end='', flush=True)
 
                 # Get conversation id
                 if data_ is not None and data_['conversation_id'] is not None:
