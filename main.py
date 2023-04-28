@@ -28,10 +28,10 @@ from revChatGPT.V3 import Chatbot
 
 # Group and name
 GROUP_REPLACE_WITH = '224-371'
-NAME_REPLACE_WITH = 'Яснецкий В.С.'
+NAME_REPLACE_WITH = 'Фмилиия И.О.'
 
 # Output file ({0} - task number)
-OUTPUT_FILE_FORMAT = '224-371_Vladislav_Yasnetsky_NITvNiPD_Pr{0}.docx'
+OUTPUT_FILE_FORMAT = '224-371_Name_Surname_NITvNiPD_Pr{0}.docx'
 
 # Go to https://platform.openai.com/account/api-keys and generate new API key and paste it below
 OPENAI_API_KEY = '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'
