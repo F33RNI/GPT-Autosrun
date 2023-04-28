@@ -18,32 +18,23 @@
 import os
 import shutil
 import time
+import uuid
 
 from docx import Document
 from docx.enum.text import WD_LINE_SPACING
 from docx.shared import Pt, Mm
 
+from revChatGPT.V3 import Chatbot
+
 # Group and name
-GROUP_REPLACE_WITH = '123-456'
-NAME_REPLACE_WITH = 'Фамилия И.О.'
+GROUP_REPLACE_WITH = '224-371'
+NAME_REPLACE_WITH = 'Яснецкий В.С.'
 
 # Output file ({0} - task number)
-OUTPUT_FILE_FORMAT = '123-456_Name_Surname_Osnovy_naukovedeniya_Pr{0}.docx'
+OUTPUT_FILE_FORMAT = '224-371_Vladislav_Yasnetsky_NITvNiPD_Pr{0}.docx'
 
-# API type 0 - official, 1 - hacked (better but not stable)
-CHATGPT_API_TYPE = 1
-# FOR TYPE 0 ONLY
 # Go to https://platform.openai.com/account/api-keys and generate new API key and paste it below
-OPENAI_API_KEY = ''
-# FOR TYPE 0 ONLY
-# ChatGPT model
-OPENAI_GPT_ENGINE = 'text-davinci-003'
-# FOR TYPE 1 ONLY
-# Go to https://chat.openai.com/api/auth/session and paste accessToken value below
-CHATGPT_ACCESS_TOKEN = ''
-# FOR TYPE 1 ONLY
-# proxy base URL (leave empty for default value)
-CHATGPT_BASE_URL = 'https://apps.openai.com/'
+OPENAI_API_KEY = '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'
 
 # Formatting settings
 PARAGRAPH_TASK = 'Задание на практическую работу'
@@ -54,20 +45,32 @@ PARAGRAPH_FONT_NAME = 'Times New Roman'
 PARAGRAPH_LEFT_INDENT_MM = 12.5
 PARAGRAPH_LINE_SPACING = WD_LINE_SPACING.ONE_POINT_FIVE
 
+# Ask ChatGPT to write sources?
+GENERATE_SOURCES = False
+
 # Skip files with this name
-SKIP_TASKS = [1, 2]
+SKIP_TASKS = []
 
 # Replaces parts of the text in request to chatGPT
 GPT_REQUEST_REPLACE_FROM = ['Вашей специальностью']
 GPT_REQUEST_REPLACE_TO = ['разработкой мобильных приложений']
 
 # Requests for chatGPT
-# {0} - task name
-REQUEST_QUESTION_API_TYPE_0 = 'Напиши по-русски 500 слов на тему "{0}"'
-REQUEST_QUESTION_API_TYPE_1 = '{0}'
-# {0} - topic name
+LECTURE_REQUEST_LIMIT = 3999
+LECTURE_REQUEST_FIRST = 'Я напишу тебе лекцию в несколько сообщений.' \
+                        ' Потом попрошу ответить на некоторые вопросы, ' \
+                        'используя текст этой лекции. Пока что я буду тебе писать части одной лекции.' \
+                        ' Когда нужно будет ответить на вопросы я напишу об этом. ' \
+                        'Поэтому пока просто "принял части лекций". Без уточнений. Вот первая часть лекции:\n'
+
+LECTURE_REQUEST_OTHER = 'Продолжение лекции:\n'
+
+QUESTION_REQUEST = 'Теперь, частично используя лекцию напиши максимально подробно на тему:\n{0}\n' \
+                   'Ответь без личных вводных слов. Сразу напиши максимальный подробный ответ на вопрос'
+
 REQUEST_SOURCES = 'Напиши по-русски и оформи список литературы из книг с номерами ' \
-                  'страниц или интернет источников по теме "{0}"'
+                  'страниц или интернет источников по теме:\n{0}'
+
 REQUEST_CONTINUE = 'Продолжай'
 
 # How many 'continue' requests can be used for each question
@@ -80,15 +83,21 @@ TASK_GROUP = 'GROUP'
 TASK_NAME = 'NAME'
 
 # Files
+LECTURES_DIR = 'lectures'
 TOPICS_FILE = 'topics.txt'
 SUB_TASKS_DIR = 'sub_tasks'
 MAIN_TASKS_DIR = 'main_tasks'
 RESULT_DIR = 'output'
 TITLE_PAGE_FILE = 'title.docx'
 
-# Too many requests in 1 hour handling
+# Rate limiting
+MIN_TIME_BETWEEN_REQUESTS_SECONDS = 30
+
+# Too many requests in 1 hour or Rate limit reached handling
 TOO_MANY_REQUESTS_EXCEPTION = 'Too many requests in 1 hour'
+RATE_LIMIT_REACHED_EXCEPTION = 'Rate limit reached'
 TOO_MANY_REQUESTS_WAIT_SECONDS = 600
+RATE_LIMIT_REACHED_WAIT_SECONDS = 30
 
 
 def replace_text_in_paragraph(paragraph_, key, value):
@@ -181,44 +190,33 @@ def document_add_paragraph(document_, item_text: str, is_list=False, indent=Fals
         paragraph_run_.bold = True
 
 
-def ask_chatbot(chatbot_, request_, conversation_id_=None):
+def ask_chatbot(chatbot, request, conversation_id, last_request_time):
     """
     Asks chatGPT
-    :param chatbot_:
-    :param request_:
-    :param conversation_id_:
+    :param chatbot:
+    :param request:
+    :param conversation_id:
+    :param last_request_time:
     :return:
     """
-    response_ = ''
-    print('Asking: ' + request_)
+    # Wait
+    if (time.time() - last_request_time) < MIN_TIME_BETWEEN_REQUESTS_SECONDS:
+        print('Waiting before next request...')
+        while (time.time() - last_request_time) < MIN_TIME_BETWEEN_REQUESTS_SECONDS:
+            time.sleep(1)
+
+    response = ''
+    print('Asking: ' + request)
+
+    # Save request time
+    last_request_time = time.time()
 
     try:
-        dot_printed_last_time = 0
-        # Official API
-        if CHATGPT_API_TYPE == 0:
-            for data_ in chatbot_.ask_stream(request_):
-                # Get response
-                response_ += str(data_)
+        for data in chatbot.ask_stream(request, convo_id=conversation_id):
+            # Get response
+            response += data
+            print(data, flush=True, end="")
 
-                # Print one dot per second
-                if time.time() - dot_printed_last_time >= 1.:
-                    dot_printed_last_time = time.time()
-                    print('.', end='')
-
-        # Hacked API
-        elif CHATGPT_API_TYPE == 1:
-            for data_ in chatbot_.ask(request_):
-                # Get response
-                response_ = data_['message']
-
-                # Print one dot per second
-                if time.time() - dot_printed_last_time >= 1.:
-                    dot_printed_last_time = time.time()
-                    print('.', end='', flush=True)
-
-                # Get conversation id
-                if data_ is not None and data_['conversation_id'] is not None:
-                    conversation_id_ = data_['conversation_id']
     except Exception as e:
         print('Error! ' + str(e))
 
@@ -228,32 +226,30 @@ def ask_chatbot(chatbot_, request_, conversation_id_=None):
             time.sleep(TOO_MANY_REQUESTS_WAIT_SECONDS)
 
             # Ask again
-            ask_chatbot(chatbot_, request_)
+            return ask_chatbot(chatbot, request, conversation_id, last_request_time)
 
-    # Remove tags
-    if CHATGPT_API_TYPE == 0:
-        response_ = response_.replace('<|im_end|>', '').replace('<|im_start|>', '')
+        elif RATE_LIMIT_REACHED_EXCEPTION in str(e):
+            print('Waiting ' + str(RATE_LIMIT_REACHED_WAIT_SECONDS) + ' seconds...')
+            time.sleep(RATE_LIMIT_REACHED_WAIT_SECONDS)
 
-    # Check and return response
-    print('OK' if len(response_) > 0 else 'Empty!')
-    return response_, conversation_id_
+            # Ask again
+            return ask_chatbot(chatbot, request, conversation_id, last_request_time)
 
+    # Check response length
+    if len(response.split(' ')) > 1:
+        # Return response
+        print('Responce words: ' + str(len(response.split(' '))))
+        return response, conversation_id, last_request_time
 
-if __name__ == '__main__':
-    # Initialize chatGPT
-    if CHATGPT_API_TYPE == 0:
-        from revChatGPT.V0 import Chatbot
-        chatbot = Chatbot(api_key=OPENAI_API_KEY, engine=OPENAI_GPT_ENGINE)
-    elif CHATGPT_API_TYPE == 1:
-        if CHATGPT_BASE_URL is not None and len(str(CHATGPT_BASE_URL)) > 0:
-            os.environ['CHATGPT_BASE_URL'] = str(CHATGPT_BASE_URL)
-        from revChatGPT.V1 import Chatbot
-        chatbot = Chatbot(config={
-            'access_token': CHATGPT_ACCESS_TOKEN
-        })
+    # No words
     else:
-        chatbot = None
-        assert Exception('Wrong CHATGPT_API_TYPE')
+        print('Empty response! Asking again')
+        return ask_chatbot(chatbot, request, conversation_id, last_request_time)
+
+
+def main():
+    # Initialize chatGPT
+    chatbot = Chatbot(api_key=OPENAI_API_KEY)
 
     # Create output dir
     if not os.path.exists(RESULT_DIR):
@@ -265,6 +261,9 @@ if __name__ == '__main__':
     topics = format_lines(topics_file.readlines(), remove_empty_lines=False, remove_ending=True)
     topics_file.close()
     print('Topics: ' + str(topics))
+
+    # Variable to store time between requests
+    last_request_time = 0
 
     # List all files in Tasks directory
     for file in os.listdir(SUB_TASKS_DIR):
@@ -285,6 +284,11 @@ if __name__ == '__main__':
                 sub_task_file = open(os.path.join(SUB_TASKS_DIR, file), 'r', encoding='utf-8')
                 sub_task_lines = format_lines(sub_task_file.readlines(), remove_empty_lines=True, remove_ending=True)
                 sub_task_file.close()
+
+                # Read lecture
+                lecture_file = open(os.path.join(LECTURES_DIR, file), 'r', encoding='utf-8')
+                lecture_lines = format_lines(lecture_file.readlines(), remove_empty_lines=True, remove_ending=False)
+                lecture_file.close()
 
                 # Copy title page
                 output_filename = os.path.join(RESULT_DIR, OUTPUT_FILE_FORMAT.format(task_number))
@@ -308,27 +312,55 @@ if __name__ == '__main__':
                                            is_list=True, justify=True)
                 document.add_paragraph()
 
+                # Start each task with new conversation_id
+                conversation_id = str(uuid.uuid4())
+
+                # Send lecture
+                lecture_request = ""
+
+                while True:
+                    if len(lecture_lines) <= 0:
+                        break
+
+                    lecture_request = LECTURE_REQUEST_FIRST if lecture_request == "" else LECTURE_REQUEST_OTHER
+                    while len(lecture_lines) > 0 and len(lecture_request) < LECTURE_REQUEST_LIMIT:
+                        last_pop_ = lecture_lines.pop(0)
+                        if len(lecture_request + last_pop_) <= LECTURE_REQUEST_LIMIT:
+                            lecture_request += last_pop_
+                        else:
+                            lecture_lines.insert(0, last_pop_)
+                            break
+
+                    response, conversation_id, last_request_time = ask_chatbot(chatbot,
+                                                                               lecture_request,
+                                                                               conversation_id,
+                                                                               last_request_time)
+                    print("", flush=True)
+
                 # Add sub-tasks
-                conversation_id = None
                 document_add_header(document, PARAGRAPH_ANSWERS, page_break=False)
                 for i in range(len(sub_task_lines)):
+                    print("", flush=True)
                     print('Processing sub-task ' + str(i + 1) + '/' + str(len(sub_task_lines))
                           + ': ' + sub_task_lines[i])
 
+                    # Add paragraph to doc
                     document_add_paragraph(document, sub_task_lines[i], is_list=True, bold=True, justify=True)
 
                     # Replace text before requesting
-                    request = '. '.join(sub_task_lines[i].split('. ')[1:])
-                    if CHATGPT_API_TYPE == 0:
-                        request = REQUEST_QUESTION_API_TYPE_0.format(request)
-                    elif CHATGPT_API_TYPE == 1:
-                        request = REQUEST_QUESTION_API_TYPE_1.format(request)
+                    request = '.'.join(sub_task_lines[i].split('.')[1:])
                     for replace_gpt_i in range(len(GPT_REQUEST_REPLACE_FROM)):
                         request = request.replace(GPT_REQUEST_REPLACE_FROM[replace_gpt_i],
                                                   GPT_REQUEST_REPLACE_TO[replace_gpt_i])
 
+                    # Format request
+                    request = QUESTION_REQUEST.format(request)
+
                     # Ask chatGPT
-                    response, conversation_id = ask_chatbot(chatbot, request, conversation_id)
+                    response, conversation_id, last_request_time = ask_chatbot(chatbot,
+                                                                               request,
+                                                                               conversation_id,
+                                                                               last_request_time)
 
                     # Split into lines
                     response_lines = format_lines(response.split('\n'), remove_empty_lines=True, remove_ending=False)
@@ -341,11 +373,11 @@ if __name__ == '__main__':
                         response_combined = ' '.join(response_lines + response_lines_temp)
                         response_words = response_combined.split(' ')
                         response_words = [word for word in response_words if len(word.strip()) > 0]
+
                         if len(response_words) > 2:
                             response_words = response_words[-2:]
                         response_check_words = ' '.join(response_words)
                         print('Ends with: ...' + response_check_words)
-
                         # Ends with dot -> done
                         if response_words[-1][-1] == '.':
                             print('Ends with dot. Finishing question...')
@@ -361,7 +393,10 @@ if __name__ == '__main__':
                         else:
                             print('Continuing... Continue task n ' + str(response_continue_counter + 1))
                             response_continue_counter += 1
-                            response, conversation_id = ask_chatbot(chatbot, REQUEST_CONTINUE, conversation_id)
+                            response, conversation_id, last_request_time = ask_chatbot(chatbot,
+                                                                                       REQUEST_CONTINUE,
+                                                                                       conversation_id,
+                                                                                       last_request_time)
                             response_lines += response_lines_temp
                             response_lines_temp = []
                             response_lines_temp += format_lines(response.split('\n'),
@@ -381,18 +416,24 @@ if __name__ == '__main__':
                     document.add_paragraph()
 
                 # Add sources
-                document_add_header(document, PARAGRAPH_SOURCES, page_break=True)
-                request = REQUEST_SOURCES.format(topics[task_index])
-                response, conversation_id = ask_chatbot(chatbot, request, conversation_id)
+                if GENERATE_SOURCES:
+                    document_add_header(document, PARAGRAPH_SOURCES, page_break=True)
+                    request = REQUEST_SOURCES.format(topics[task_index])
+                    response, conversation_id, last_request_time = ask_chatbot(chatbot,
+                                                                               request,
+                                                                               'default',
+                                                                               last_request_time)
 
-                # Split into lines
-                response_lines = format_lines(response.split('\n'), remove_empty_lines=True, remove_ending=True)
+                    # Split into lines
+                    response_lines = format_lines(response.split('\n'), remove_empty_lines=True, remove_ending=True)
 
-                # Add to the document
-                for i in range(len(response_lines)):
-                    document_add_paragraph(document,
-                                           response_lines[i] + (';' if i < (len(main_task_lines) - 1) else '.'),
-                                           indent=True, is_list=True, justify=True)
+                    # Add to the document
+                    for i in range(len(response_lines)):
+                        document_add_paragraph(document,
+                                               response_lines[i] + (';' if i < (len(main_task_lines) - 1) else '.'),
+                                               indent=True, is_list=True, justify=True)
+                else:
+                    print('Skipping sources')
 
                 # Save document
                 document.save(output_filename)
@@ -401,3 +442,7 @@ if __name__ == '__main__':
             # Skip task
             else:
                 print('Skipping task n ' + str(task_number))
+
+
+if __name__ == '__main__':
+    main()

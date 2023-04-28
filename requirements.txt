@@ -1,2 +1,2 @@
-revChatGPT>=2.3.14
+revChatGPT>=5.0.0
 python-docx>=0.8.11
